@@ -4,12 +4,17 @@ Game Logic Notes -  The weakest of previous gen is replaced by the child of the 
 
                     End generation when time is up OR when all producers have been filled (i.e. the producersX is only nulls)
 
+                    TO-DO:
+                        - Add trade and barter logic
+                        - Impact strength based on if trade successful in last generation
+                        - Store trait variables and produce graphs in stats screen
+
 
 */
 
 final float windowSizeMultiplier = 1;
 final int SEED = random(1000)+1;
-final float epsilon = 3;
+final float epsilon = 6;
 
 int windowWidth = 1920;
 int windowHeight = 1080;
@@ -31,7 +36,6 @@ int score = 0;
 int GENERATION = 0;
 int CURR_TICK = 0;
 int GENERATION_TIME = 10 * FRAMES;   // 10 second generation time
-boolean alreadychangedvars = false;
 
 int fontSize = 0;
 int[] fontSizes = {
@@ -73,6 +77,8 @@ class Consumer{
   boolean MOVING;
   int prodX, prodY;
 
+  int birthSpeedX, birthSpeedY;
+
 
   // PARENT CONSTRUCTOR CLASS - 1st Generation
   Consumer(int UUID){
@@ -89,22 +95,24 @@ class Consumer{
     // should be a function of wealth and risk
     this.reservationPrice = random(20,30) + random(5,10)*(2-this.risk);     // E[p] = 25 + 7.5*risk = 32.5 for neutral
     this.speedX = random(5)+3;          // max = 8   min = 3
+    this.birthSpeedX = speedX;
     this.speedY = random(5)+3;          // max = 8   min = 3
+    this.birthSpeedY = speedY;
     this.sense = random(150)+100+size;  // max = 305    min = 150.5
     
     this.UUID = UUID
     this.x = random(((((windowWidth-200)/(CONSUMERS+1)))*UUID)+100, ((((windowWidth-200)/(CONSUMERS+1)))*(UUID+1))+100);
     this.y = random(windowHeight-200, windowHeight-150);
-    this.r = random(0);
-    this.g = int(random(150, 255));
-    this.b = random(0);
+    this.r = random(50, 200);
+    this.g = int(random(50, 255));
+    this.b = random(50, 250);
     this.MOVING = true;
     consumersSAT[this.UUID] = this.sat;
 
   }
 
   // CHILD CONSTRUCTOR CLASS
-  Consumer(int UUID, int parentWealth, int parentRisk, int speed){
+  Consumer(int UUID, int parentWealth, int parentRisk, int speedX, int speedY, int sense, int r, int g, int b){
     this.sat = false;
     // start with no product owned
     this.amountOwned = 0;
@@ -131,16 +139,18 @@ class Consumer{
     }    
     // should be a function of wealth and risk
     this.reservationPrice = random(20,30) + random(5,10)*(2-this.risk);
-    this.speedX = random(3) + speed;
-    this.speedY = random(3) + speed; 
-    this.sense = random(150)+100;
+    this.speedX = random(2) + speedX;
+    this.birthSpeedX = speedX;
+    this.speedY = random(2) + speedY; 
+    this.birthSpeedY = speedY;
+    this.sense = random(-30, 30) + sense;
     
     this.UUID = UUID
     this.x = random(((((windowWidth-200)/(CONSUMERS+1)))*UUID)+100, ((((windowWidth-200)/(CONSUMERS+1)))*(UUID+1))+100);
     this.y = random(windowHeight-200, windowHeight-150);
-    this.r = random(0);
-    this.g = int(random(150, 255));
-    this.b = random(0);
+    this.r = r;
+    this.g = g;
+    this.b = b;
     this.MOVING = true;
     consumersSAT[this.UUID] = this.sat;
   }
@@ -198,7 +208,7 @@ class Consumer{
         this.prodY = producersY[chk];
         producersY[chk] = null;
         producersX[chk] = null;
-        println(producersX);
+        // println(producersX);
         int temp = (abs(speedX)+abs(speedY))/2;
         speedX = this.prodX - this.x;
         speedY = this.prodY - this.y;
@@ -256,6 +266,34 @@ class Consumer{
 
   private void set_wealth(float w){
     this.wealth = w;
+  }
+
+  float get_wealth(){
+    return this.wealth;
+  }
+  int get_risk(){
+    return this.risk;
+  }
+  int [] get_speed(){
+    return [birthSpeedX, birthSpeedY];
+  }
+  int get_sense(){
+    return this.sense;
+  }
+  int [] get_colors(){
+    return [this.r, this.g, this.b];
+  }
+
+  void reset_for_next_gen(){
+    this.x = random(((((windowWidth-200)/(CONSUMERS+1)))*UUID)+100, ((((windowWidth-200)/(CONSUMERS+1)))*(UUID+1))+100);
+    this.y = random(windowHeight-200, windowHeight-150);
+    this.prodX = null;
+    this.prodY = null;
+    this.MOVING = true;
+    this.sat = false;
+    consumersSAT[this.UUID] = this.sat;
+    this.speedX = birthSpeedX;
+    this.speedY = birthSpeedY;
   }
 
 }
@@ -334,10 +372,15 @@ void reset() {
   score = 0;
   GENERATION = 0;
   CURR_TICK = 0;
-  alreadychangedvars = false;
 
-  producersX = new int[PRODUCERS];
-  producersY = new int[PRODUCERS];
+  for(int i = 0; i < producersX.length; i++){
+    producersX[i] = null;
+    producersY[i] = null;
+  }
+
+  for(int i = 0; i < consumersSAT.length; i++){
+    consumersSAT[i] = null;
+  }
 
   currentGenConsumers = new Consumer[CONSUMERS];
   consPtr = 0;
@@ -345,14 +388,6 @@ void reset() {
   prdsPtr = 0;
 
   setMenu(100);
-}
-
-void increment_generation(){
-  if(!alreadychangedvars){
-    alreadychangedvars = true;
-    GENERATION++;
-    CURR_TICK = 0;
-  }
 }
 
 boolean is_true(boolean[] arr){
@@ -364,6 +399,74 @@ boolean is_true(boolean[] arr){
   return true;
 }
 // ==================================================================================
+
+
+
+void increment_generation(){
+  GENERATION++;
+  CURR_TICK = 0;
+
+
+  // ----------- CONSUMER
+
+  // println("inside incr_gen1");
+  int minWealth = 10000000;
+  int maxWealth = -10000000;
+
+  int worstCons = -1;
+  int bestCons = -1;
+
+  int tempW = 0;
+
+  // println("inside incr_gen2");
+  for(int i = 0; i < currentGenConsumers.length; i++){
+    if(currentGenConsumers[i] != null){
+      // get best and worst
+      tempW = currentGenConsumers[i].total_wealth();
+      println(i + " " + tempW);
+      if(tempW < minWealth){
+        minWealth = tempW;
+        worstCons = i;
+      }
+      if(tempW > maxWealth){
+        maxWealth = tempW;
+        bestCons = i;
+      }
+
+      // reset position
+      currentGenConsumers[i].reset_for_next_gen();
+    }
+  }
+  println("");
+  // println("inside incr_gen3");
+  int UUID;
+  if(worstCons != bestCons){
+    // replace worst consumer
+    int [] colors = currentGenConsumers[bestCons].get_colors();
+    UUID = currentGenConsumers[worstCons].UUID;
+    currentGenConsumers[worstCons] = new Consumer(UUID, currentGenConsumers[bestCons].get_wealth(), currentGenConsumers[bestCons].get_risk(), currentGenConsumers[bestCons].get_speed()[0], currentGenConsumers[bestCons].get_speed()[1], currentGenConsumers[bestCons].get_sense(), colors[0], colors[1], colors[2]);
+  } else if(worstCons == bestCons) {
+    // replace random person
+    UUID = random(cons);
+    currentGenConsumers[UUID] = new Consumer(UUID);
+  }
+
+  println("Best : " + bestCons);
+  println("Worst : " + worstCons);
+
+
+
+  // ------------- PRODUCER 
+
+  for(int i = 0; i < currentGenProducers.length; i++){
+    if(currentGenProducers[i] != null){
+      producersX[i] = currentGenProducers[i].x;
+      producersY[i] = currentGenProducers[i].y;
+    }
+  }
+
+
+}
 
 
 
@@ -421,6 +524,9 @@ void mouseReleased() {
       }
     }
     reset();
+  } else if (menu == 202 && abs(mX-(windowWidth-210)) <= 200 && abs(mY-60) <= 50) {
+    // -------------------------------- NEXT GENERATION
+    setMenu(200);
   }
 }
 // -------------------------------------------------------- MOUSE ACTION --------------------------------------------------------
@@ -461,6 +567,7 @@ void setup() {
 // END GAME SCREEN    = -1
 // ======================================
 void draw() {
+  // println(menu);
   if (menu == 100) {
     // MAIN MENU
     background(34, 47, 62);
@@ -545,6 +652,7 @@ void draw() {
     text("KILL", windowWidth/2, 75)
     fill(255),
     text("Generation " + GENERATION, 150, 50);
+    text("Timer: " + int(CURR_TICK/60) + "s", windowWidth-100, 50);
 
     CURR_TICK++;
 
@@ -559,19 +667,19 @@ void draw() {
     for(int i = 0; i < currentGenProducers.length; i++){
       if(currentGenProducers[i] != null){
         currentGenProducers[i].display(this);
-        // currentGenProducers[0].move();
       }
     }
 
     // IF out of time OR all consumers are satisfied THEN go to generation stats screen
     if(CURR_TICK >= GENERATION_TIME || is_true(consumersSAT)){
+      increment_generation();
+      println("going to stats");
       setMenu(202);
     }
 
   } else if (menu == 202) {
     // MAIN GAME SCREEN - END OF GENERATION X STATISTICS
-    increment_generation();
-    
+
     background(#f7d794);
     fill(100, 200, 100);
     noStroke();
