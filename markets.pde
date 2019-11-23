@@ -15,7 +15,7 @@ Game Logic Notes -  The weakest of previous gen is replaced by the child of the 
 final float windowSizeMultiplier = 1;
 final int SEED = random(1000)+1;
 final float epsilon = 6;
-boolean SHOW_RADIUS = true;
+boolean SHOW_RADIUS = false;
 
 int windowWidth = 1920;
 int windowHeight = 1080;
@@ -29,7 +29,13 @@ boolean [] consumersSAT = new boolean[CONSUMERS];
 
 PFont font;
 PGraphics screenImage;
+
+PImage mainMenuPNG;
 PImage simBG;
+PImage producerPNG;
+PImage consumerPNG;
+PImage consumer_leftPNG;
+PImage consumer_rightPNG;
 
 int FRAMES = 60;
 int menu = 100;
@@ -78,9 +84,12 @@ class Consumer{
   int size;
   int x, y;
   int r, g, b;
+  color colour;
   float rand;
   boolean MOVING;
   int prodX, prodY;
+  boolean left;
+  int switchLegs;
 
   int birthSpeedX, birthSpeedY;
   Producer seller;
@@ -101,9 +110,9 @@ class Consumer{
     this.risk = random(3);      
     // should be a function of wealth and risk
     this.reservationPrice = random(20,30) + random(5,10)*(2-this.risk);     // E[p] = 25 + 7.5*risk = 32.5 for neutral
-    this.speedX = int(random(-8,8));          // max = 8   min = -8
+    this.speedX = int(random(-5,5));          // max = 8   min = -8
     this.birthSpeedX = speedX;
-    this.speedY = int(random(-8,8));          // max = 8   min = -8
+    this.speedY = int(random(-5,5));          // max = 8   min = -8
     this.birthSpeedY = speedY;
     this.sense = random(150)+100+size;  // max = 305    min = 150.5
     
@@ -113,8 +122,12 @@ class Consumer{
     this.r = random(50, 200);
     this.g = int(random(50, 255));
     this.b = random(50, 250);
+    this.colour = color(r,g,b);
     this.MOVING = true;
     consumersSAT[this.UUID] = this.sat;
+    this.left = false;
+    this.switchLegs = 0;
+
 
   }
 
@@ -159,8 +172,11 @@ class Consumer{
     this.r = r;
     this.g = g;
     this.b = b;
+    this.colour = color(r,g,b);
     this.MOVING = true;
     consumersSAT[this.UUID] = this.sat;
+    this.left = false;
+    this.switchLegs = 0;
   }
 
   // current logic : if below res price, accept; else pick random b/w 0 and res
@@ -255,8 +271,8 @@ class Consumer{
 		} if (x < 0){
 			x = 0;
 			speedX *= -1;
-		} if (y < 0){
-			y = 0;
+		} if (y < windowHeight/2 - 220){
+			y = windowHeight/2 - 220;
 			speedY *= -1;
 		}
 
@@ -283,7 +299,30 @@ class Consumer{
     }
     noStroke();
     fill(r, g, b);
-		ellipse(x,  y,  size,  size);
+		// ellipse(x,  y,  size,  size);
+    if(menu == 200 || this.sat){
+      image(consumerPNG, x-48, y-49);
+    }
+    else if(menu == 201 && left){
+      switchLegs++;
+      if(switchLegs > FRAMES){
+        image(consumer_leftPNG, x-48, y-49); 
+        left = false;
+        switchLegs = 0;
+      } else {
+        image(consumer_rightPNG, x-48, y-49);
+      }
+    }
+    else if(menu == 201 && !left){
+      switchLegs++;
+      if(switchLegs > FRAMES){
+        image(consumer_rightPNG, x-48, y-49); 
+        left = true;
+        switchLegs = 0;
+      } else {
+        image(consumer_leftPNG, x-48, y-49); 
+      }
+    }
     fill(255);
     text(UUID, x, y);
 	}
@@ -352,7 +391,7 @@ class Producer{
     this.UUID = UUID;
     this.size = 50;
     this.x = random(((((windowWidth-200)/(CONSUMERS+1)))*UUID)+100, ((((windowWidth-200)/(CONSUMERS+1)))*(UUID+1))+100);
-    this.y = random(windowHeight/2 - 150, windowHeight/2 - 200);
+    this.y = random(windowHeight/2 - 150, windowHeight/2 - 180);
     this.r = random(0);
     this.g = random(0);
     this.b = random(150, 255);
@@ -384,10 +423,11 @@ class Producer{
 
   void display(){
 		noStroke();
-		fill(r, g, b);
-		ellipse(x,  y,  size,  size);
+		// fill(r, g, b);
+		// ellipse(x,  y,  size,  size);
+    image(producerPNG, x-58, y-59);
     fill(255);
-    text(UUID, x, y);
+    text(UUID, x-10, y-4);
 	}
 
   private void set_wealth(float w){
@@ -528,11 +568,11 @@ void increment_generation(){
 void mouseReleased() {
   float mX = mouseX/windowSizeMultiplier;
   float mY = mouseY/windowSizeMultiplier;
-  if (menu == 100 && abs(mX-(windowWidth/2)) <= 200 && abs(mY-250) <= 50) {
+  if (menu == 100 && abs(mX-(windowWidth/2)) <= 200 && abs(mY-400) <= 50) {
     setMenu(200); // goto GAME
-  } else if (menu == 100 && abs(mX-(windowWidth/2)) <= 200 && abs(mY-400) <= 50) {
-    setMenu(101); // goto INSTRUCTIONS
   } else if (menu == 100 && abs(mX-(windowWidth/2)) <= 200 && abs(mY-550) <= 50) {
+    setMenu(101); // goto INSTRUCTIONS
+  } else if (menu == 100 && abs(mX-(windowWidth/2)) <= 200 && abs(mY-700) <= 50) {
     setMenu(102); // goto CREDITS
   } else if ((menu == 102 || menu == 101) && abs(mX-(windowWidth/2)) <= 200 && abs(mY-550) <= 50) {
     setMenu(100); // goto MAIN MENU
@@ -605,11 +645,18 @@ void setup() {
     consumersSAT[i] = null;
   }
   
-  font = loadFont("Helvetica-Bold-96.vlw"); 
-  textFont(font, 96);
+  font = loadFont("Oswald-Regular.ttf", 96); 
+  textFont(font);
   textAlign(CENTER);
   scale(windowSizeMultiplier);
-  simBG = loadImage("img/tile.jpg");
+  mainMenuPNG = loadImage("img/mainmenu.jpg");
+  simBG = loadImage("img/bg.png");
+  producerPNG = loadImage("img/producer.png");
+  consumerPNG = loadImage("img/consumer.png");
+  consumer_rightPNG = loadImage("img/consumer_right.png");
+  consumer_leftPNG = loadImage("img/consumer_left.png");
+
+  mainMenuPNG.filter(BLUR, 6);
   // simBG.resize(windowWidth, windowHeight);
 }
 
@@ -623,21 +670,23 @@ void draw() {
   // println(menu);
   if (menu == 100) {
     // MAIN MENU
-    background(34, 47, 62);
+    image(mainMenuPNG,0,0);
+    stroke(220);
+    noFill();
+    strokeWeight(20);
+    rect(0, 0, windowWidth-1, windowHeight-1);
+
     fill(100, 200, 100);
     noStroke();
-    // translate(windowWidth/2, windowHeight/2);
-    // rotateX(PI/3);
-    // translate(-windowWidth/2,-windowHeight/2);
-    rect(windowWidth/2-200, 200, 400, 100);  // rect(x, y, w, h)
-    rect(windowWidth/2-200, 350, 400, 100);
+    rect(windowWidth/2-200, 350, 400, 100);  // rect(x, y, w, h)
     rect(windowWidth/2-200, 500, 400, 100);
+    rect(windowWidth/2-200, 650, 400, 100);
     fill(255);
-    text("MARKETS", windowWidth/2, 100);
+    text("MARKETS", windowWidth/2, 200);
     textFont(font, 40);
-    text("START", windowWidth/2, 265);
-    text("INSTRUCTIONS", windowWidth/2, 415);
-    text("CREDITS", windowWidth/2, 565);
+    text("START", windowWidth/2, 410);
+    text("INSTRUCTIONS", windowWidth/2, 565);
+    text("CREDITS", windowWidth/2, 710);
     textFont(font, 96);
   } else if (menu == 101) {
     // INSTRUCTIONS
@@ -713,16 +762,16 @@ void draw() {
     CURR_TICK++;
 
     textFont(font, 12);
+    for(int i = 0; i < currentGenProducers.length; i++){
+      if(currentGenProducers[i] != null){
+        currentGenProducers[i].display(this);
+      }
+    }
+
     for(int i = 0; i < currentGenConsumers.length; i++){
       if(currentGenConsumers[i] != null){
         currentGenConsumers[i].display(this);
         currentGenConsumers[i].move();
-      }
-    }
-
-    for(int i = 0; i < currentGenProducers.length; i++){
-      if(currentGenProducers[i] != null){
-        currentGenProducers[i].display(this);
       }
     }
 
