@@ -10,7 +10,7 @@ Game Logic Notes -  The weakest of previous gen is replaced by the child of the 
                         - Store trait variables and produce graphs in stats screen
 
 
-*/
+*/	
 
 final float windowSizeMultiplier = 1;
 final int SEED = int(random(1000))+1;
@@ -33,6 +33,8 @@ PGraphics screenImage;
 PImage mainMenuPNG;
 PImage simBG;
 PImage producerPNG;
+PImage logoPNG;
+
 
 int FRAMES = 60;
 int menu = 100;
@@ -40,6 +42,7 @@ int score = 0;
 int GENERATION = 0;
 int CURR_TICK = 0;
 int GENERATION_TIME = 5 * FRAMES;   // 10 second generation time
+int START_SCREEN_ENTER = 0;
 
 // ---------- STATISTICS DATA ----------
 ArrayList consWealthHistory = new ArrayList();
@@ -581,17 +584,28 @@ void increment_generation(){
 
 
 // ================================================================================================================================
-// -------------------------------------------------------- MOUSE ACTION --------------------------------------------------------
+// -------------------------------------------------------- TRAVERSE SCENE ACTION --------------------------------------------------------
+void keyPressed() {
+  if (menu == 100){
+    setMenu(200);
+  }
+}
+
+
 void mouseReleased() {
   float mX = mouseX/windowSizeMultiplier;
   float mY = mouseY/windowSizeMultiplier;
   if (menu == 100 && abs(mX-(windowWidth/2)) <= 200 && abs(mY-400) <= 50) {
     setMenu(200); // goto GAME
-  } else if (menu == 100 && abs(mX-(windowWidth/2)) <= 200 && abs(mY-550) <= 50) {
-    setMenu(101); // goto INSTRUCTIONS
-  } else if (menu == 100 && abs(mX-(windowWidth/2)) <= 200 && abs(mY-700) <= 50) {
-    setMenu(102); // goto CREDITS
-  } else if ((menu == 102 || menu == 101) && abs(mX-(windowWidth/2)) <= 200 && abs(mY-550) <= 50) {
+  } 
+  
+  // else if (menu == 100 && abs(mX-(windowWidth/2)) <= 200 && abs(mY-550) <= 50) {
+  //   setMenu(101); // goto INSTRUCTIONS
+  // } else if (menu == 100 && abs(mX-(windowWidth/2)) <= 200 && abs(mY-700) <= 50) {
+  //   setMenu(102); // goto CREDITS
+  // } 
+  
+  if ((menu == 102 || menu == 101) && abs(mX-(windowWidth/2)) <= 200 && abs(mY-550) <= 50) {
     setMenu(100); // goto MAIN MENU
   } else if (menu == -1 && abs(mX-(windowWidth/2)) <= 300 && abs(mY-400) <= 100) {
     reset();
@@ -666,16 +680,14 @@ void setup() {
   textFont(font);
   textAlign(CENTER);
   scale(windowSizeMultiplier);
-  mainMenuPNG = loadImage("img/mainmenu.jpg");
+  mainMenuPNG = loadImage("img/mainmenu.png");
+  logoPNG = loadImage("img/logo.png");
 
   simBG = loadImage("img/bg.png");
   producerPNG = loadImage("img/producer.png");
   // consumerPNG = loadImage("img/consumer.png");
   // consumer_rightPNG = loadImage("img/consumer_right.png");
   // consumer_leftPNG = loadImage("img/consumer_left.png");
-
-  mainMenuPNG.filter(BLUR, 6);
-  // simBG.resize(windowWidth, windowHeight);
 }
 
 
@@ -689,23 +701,25 @@ void draw() {
   if (menu == 100) {
     // MAIN MENU
     image(mainMenuPNG,0,0);
-    stroke(220);
+    stroke(255);
     noFill();
     strokeWeight(20);
     rect(0, 0, windowWidth-1, windowHeight-1);
 
+    image(logoPNG, 1125, 105)
     fill(100, 200, 100);
     noStroke();
-    rect(windowWidth/2-200, 350, 400, 100);  // rect(x, y, w, h)
-    rect(windowWidth/2-200, 500, 400, 100);
-    rect(windowWidth/2-200, 650, 400, 100);
+    // rect(windowWidth/2-200, windowHeight-160, 400, 100);  // rect(x, y, w, h)
+    // rect(windowWidth/2-200, 500, 400, 100);
+    // rect(windowWidth/2-200, 650, 400, 100);
     fill(255);
-    text("MARKETS", windowWidth/2, 200);
+    text("MARKET ", windowWidth/2, 200);
     textFont(font, 40);
-    text("START", windowWidth/2, 410);
-    text("INSTRUCTIONS", windowWidth/2, 565);
-    text("CREDITS", windowWidth/2, 710);
+    text("Press Enter to Start", windowWidth/2, windowHeight-100 + 5*cos(START_SCREEN_ENTER/8));
+    // text("INSTRUCTIONS", windowWidth/2, 565);
+    // text("CREDITS", windowWidth/2, 710);
     textFont(font, 96);
+    START_SCREEN_ENTER++
   } else if (menu == 101) {
     // INSTRUCTIONS
     background(34, 47, 62);
