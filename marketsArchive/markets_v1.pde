@@ -33,13 +33,16 @@ PGraphics screenImage;
 PImage mainMenuPNG;
 PImage simBG;
 PImage producerPNG;
+PImage consumerPNG;
+PImage consumer_leftPNG;
+PImage consumer_rightPNG;
 
 int FRAMES = 60;
 int menu = 100;
 int score = 0;
 int GENERATION = 0;
 int CURR_TICK = 0;
-int GENERATION_TIME = 5 * FRAMES;   // 10 second generation time
+int GENERATION_TIME = 10 * FRAMES;   // 10 second generation time
 
 // ---------- STATISTICS DATA ----------
 ArrayList consWealthHistory = new ArrayList();
@@ -67,10 +70,6 @@ TRAITS :  Sense - radius of vision to spot a producer, a function of wealth - bu
 
 */
 class Consumer{
-  private PImage consumerPNG;
-  private PImage consumer_leftPNG;
-  private PImage consumer_rightPNG;
-  
   // traits
   private float reservationPrice;
   int speedX;
@@ -85,7 +84,7 @@ class Consumer{
   int size;
   int x, y;
   int r, g, b;
-  int colour;
+  color colour;
   float rand;
   boolean MOVING;
   int prodX, prodY;
@@ -98,17 +97,6 @@ class Consumer{
 
   // PARENT CONSTRUCTOR CLASS - 1st Generation
   Consumer(int UUID){
-    // image processing
-    this.colour = int(random(0,5));
-    this.consumerPNG = loadImage("img/consumerart/consumer" + colour + ".png");
-    this.consumer_rightPNG = loadImage("img/consumerart/consumer_right" + colour + ".png");
-    this.consumer_leftPNG = loadImage("img/consumerart/consumer_left" + colour + ".png");
-
-    // this.r = random(50, 200);
-    // this.g = int(random(50, 255));
-    // this.b = random(50, 250);
-    // this.colour = color(this.r,this.g,this.b);
-
     // not satisfied for the current cycle
     this.sat = false;
     // start with no product owned
@@ -131,6 +119,10 @@ class Consumer{
     this.UUID = UUID
     this.x = random(((((windowWidth-200)/(CONSUMERS+1)))*UUID)+100, ((((windowWidth-200)/(CONSUMERS+1)))*(UUID+1))+100);
     this.y = random(windowHeight-200, windowHeight-150);
+    this.r = random(50, 200);
+    this.g = int(random(50, 255));
+    this.b = random(50, 250);
+    this.colour = color(r,g,b);
     this.MOVING = true;
     consumersSAT[this.UUID] = this.sat;
     this.left = false;
@@ -140,14 +132,7 @@ class Consumer{
   }
 
   // CHILD CONSTRUCTOR CLASS
-  Consumer(int UUID, float reservationPrice, int parentWealth, int parentRisk, int speedX, int speedY, int sense, int colour){
-    
-    println("CHILD BEING CREATED WITH UUID " + UUID);
-    println(colour);
-    this.consumerPNG = loadImage("img/consumerart/consumer" + colour + ".png");
-    this.consumer_rightPNG = loadImage("img/consumerart/consumer_right" + colour + ".png");
-    this.consumer_leftPNG = loadImage("img/consumerart/consumer_left" + colour + ".png");
-
+  Consumer(int UUID, float reservationPrice, int parentWealth, int parentRisk, int speedX, int speedY, int sense, int r, int g, int b){
     this.sat = false;
     // start with no product owned
     this.amountOwned = 0;
@@ -184,6 +169,10 @@ class Consumer{
     this.UUID = UUID
     this.x = random(((((windowWidth-200)/(CONSUMERS+1)))*UUID)+100, ((((windowWidth-200)/(CONSUMERS+1)))*(UUID+1))+100);
     this.y = random(windowHeight-200, windowHeight-150);
+    this.r = r;
+    this.g = g;
+    this.b = b;
+    this.colour = color(r,g,b);
     this.MOVING = true;
     consumersSAT[this.UUID] = this.sat;
     this.left = false;
@@ -215,79 +204,79 @@ class Consumer{
     return -1;
   }
 
-  // void move(){
-  //   if(!MOVING || (abs(this.x - this.prodX) <= epsilon && abs(this.y - this.prodY) <= epsilon)){
-  //     consumersSAT[this.UUID] = true;
-  //     return;
-  //   }
-  //   // println(producersX);
+  void move(){
+    if(!MOVING || (abs(this.x - this.prodX) <= epsilon && abs(this.y - this.prodY) <= epsilon)){
+      consumersSAT[this.UUID] = true;
+      return;
+    }
+    // println(producersX);
 
-  //   if(!this.sat){
-  //     rand = random(0,1);
-  //     if(rand > 0.97){random_walk();}
+    if(!this.sat){
+      rand = random(0,1);
+      if(rand > 0.97){random_walk();}
       
-  //     int chk = check_range();
-  //     if(chk != -1){
-  //       // FOUND SELLER, now need to barter -
-  //       this.seller = currentGenProducers[chk];
-  //       if(this.seller.get_available){
-  //         // seller has material to sell - continue
-  //         float prpsdOffer = -1;
-  //         float backOffer = -2;
-  //         int backAndForth = 0;
-  //         while(prpsdOffer != backOffer){
-  //           if(backAndForth >= 5){
-  //             break;
-  //           }
-  //           prpsdOffer = random(0,min(this.reservationPrice,this.wealth));
-  //           backOffer = this.seller.barter(prpsdOffer);
-  //           backAndForth++;
-  //         }
+      int chk = check_range();
+      if(chk != -1){
+        // FOUND SELLER, now need to barter -
+        this.seller = currentGenProducers[chk];
+        if(this.seller.get_available){
+          // seller has material to sell - continue
+          float prpsdOffer = -1;
+          float backOffer = -2;
+          int backAndForth = 0;
+          while(prpsdOffer != backOffer){
+            if(backAndForth >= 5){
+              break;
+            }
+            prpsdOffer = random(0,min(this.reservationPrice,this.wealth));
+            backOffer = this.seller.barter(prpsdOffer);
+            backAndForth++;
+          }
           
-  //         if(prpsdOffer == backOffer){
-  //           // agreement reached! - update all as necessary
-  //           this.sat = true;
-  //           this.prodX = producersX[chk];
-  //           this.prodY = producersY[chk];
-  //           producersY[chk] = null;
-  //           producersX[chk] = null;
-  //           int tempMult = (abs(speedX)+abs(speedY))/2;
-  //           this.speedX = this.prodX - this.x;
-  //           this.speedY = this.prodY - this.y;
-  //           int div = sqrt(pow(speedX,2)+pow(speedY,2));
-  //           this.speedX = tempMult*this.speedX/div;
-  //           this.speedY = tempMult*this.speedY/div;
+          if(prpsdOffer == backOffer){
+            // agreement reached! - update all as necessary
+            this.sat = true;
+            this.prodX = producersX[chk];
+            this.prodY = producersY[chk];
+            producersY[chk] = null;
+            producersX[chk] = null;
+            int tempMult = (abs(speedX)+abs(speedY))/2;
+            this.speedX = this.prodX - this.x;
+            this.speedY = this.prodY - this.y;
+            int div = sqrt(pow(speedX,2)+pow(speedY,2));
+            this.speedX = tempMult*this.speedX/div;
+            this.speedY = tempMult*this.speedY/div;
 
-  //           this.wealth -= prpsdOffer;
-  //           this.amountOwned++;
-  //           this.seller.deal_made(backOffer, this);
-  //         }
+            this.wealth -= prpsdOffer;
+            this.amountOwned++;
+            this.seller.deal_made(backOffer, this);
+          }
 
-  //       }
-  //     }
+        }
+      }
       
-  //   }
+    }
 
-  //   // move
-  //   x += speedX;
-  //   y += speedY;
+    // move
+    x += speedX;
+    y += speedY;
 
-  //   // bounce logic
-  //   if (x > windowWidth){
-	// 		x = width;
-	// 		speedX *= -1;
-	// 	} if (y > windowHeight){
-	// 		y = height;
-	// 		speedY *= -1;
-	// 	} if (x < 0){
-	// 		x = 0;
-	// 		speedX *= -1;
-	// 	} if (y < windowHeight/2 - 220){
-	// 		y = windowHeight/2 - 220;
-	// 		speedY *= -1;
-	// 	}
+    // bounce logic
+    if (x > windowWidth){
+			x = width;
+			speedX *= -1;
+		} if (y > windowHeight){
+			y = height;
+			speedY *= -1;
+		} if (x < 0){
+			x = 0;
+			speedX *= -1;
+		} if (y < windowHeight/2 - 220){
+			y = windowHeight/2 - 220;
+			speedY *= -1;
+		}
 
-	// }
+	}
 
   // add angle change
   void random_walk(){
@@ -312,33 +301,26 @@ class Consumer{
     fill(r, g, b);
 		// ellipse(x,  y,  size,  size);
     if(menu == 200 || this.sat){
-      int dimension = (96*96);
-      this.consumerPNG.loadPixels();
-      for (int i=0; i < dimension; i+=2) { 
-        this.consumerPNG.pixels[i] = color(0, 0, 0); 
-      } 
-      this.consumerPNG.updatePixels();
-      image(this.consumerPNG, x-48, y-49);
-
+      image(consumerPNG, x-48, y-49);
     }
     else if(menu == 201 && left){
       switchLegs++;
-      if(switchLegs > FRAMES/2){
-        image(this.consumer_leftPNG, x-48, y-49); 
+      if(switchLegs > FRAMES){
+        image(consumer_leftPNG, x-48, y-49); 
         left = false;
         switchLegs = 0;
       } else {
-        image(this.consumer_rightPNG, x-48, y-49);
+        image(consumer_rightPNG, x-48, y-49);
       }
     }
     else if(menu == 201 && !left){
       switchLegs++;
-      if(switchLegs > FRAMES/2){
-        image(this.consumer_rightPNG, x-48, y-49); 
+      if(switchLegs > FRAMES){
+        image(consumer_rightPNG, x-48, y-49); 
         left = true;
         switchLegs = 0;
       } else {
-        image(this.consumer_leftPNG, x-48, y-49); 
+        image(consumer_leftPNG, x-48, y-49); 
       }
     }
     fill(255);
@@ -548,8 +530,9 @@ void increment_generation(){
   int UUID;
   if(worstCons != bestCons){
     // replace worst consumer
+    int [] colors = currentGenConsumers[bestCons].get_colors();
     UUID = currentGenConsumers[worstCons].UUID;
-    currentGenConsumers[worstCons] = new Consumer(UUID, currentGenConsumers[bestCons].get_reservationPrice(), currentGenConsumers[bestCons].get_wealth(), currentGenConsumers[bestCons].get_risk(), currentGenConsumers[bestCons].get_speed()[0], currentGenConsumers[bestCons].get_speed()[1], currentGenConsumers[bestCons].get_sense(), currentGenConsumers[bestCons].colour);
+    currentGenConsumers[worstCons] = new Consumer(UUID, currentGenConsumers[bestCons].get_reservationPrice(), currentGenConsumers[bestCons].get_wealth(), currentGenConsumers[bestCons].get_risk(), currentGenConsumers[bestCons].get_speed()[0], currentGenConsumers[bestCons].get_speed()[1], currentGenConsumers[bestCons].get_sense(), colors[0], colors[1], colors[2]);
   } else if(worstCons == bestCons) {
     // replace random person
     UUID = random(cons);
@@ -667,12 +650,11 @@ void setup() {
   textAlign(CENTER);
   scale(windowSizeMultiplier);
   mainMenuPNG = loadImage("img/mainmenu.jpg");
-
   simBG = loadImage("img/bg.png");
   producerPNG = loadImage("img/producer.png");
-  // consumerPNG = loadImage("img/consumer.png");
-  // consumer_rightPNG = loadImage("img/consumer_right.png");
-  // consumer_leftPNG = loadImage("img/consumer_left.png");
+  consumerPNG = loadImage("img/consumer.png");
+  consumer_rightPNG = loadImage("img/consumer_right.png");
+  consumer_leftPNG = loadImage("img/consumer_left.png");
 
   mainMenuPNG.filter(BLUR, 6);
   // simBG.resize(windowWidth, windowHeight);
@@ -789,7 +771,7 @@ void draw() {
     for(int i = 0; i < currentGenConsumers.length; i++){
       if(currentGenConsumers[i] != null){
         currentGenConsumers[i].display(this);
-        // currentGenConsumers[i].move();
+        currentGenConsumers[i].move();
       }
     }
 
