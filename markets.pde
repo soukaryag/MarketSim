@@ -45,7 +45,7 @@ int menu = 100;
 int score = 0;
 int GENERATION = 0;
 int CURR_TICK = 0;
-int GENERATION_TIME = 5 * FRAMES;   // 10 second generation time
+int GENERATION_TIME = 15 * FRAMES;   // 10 second generation time
 int START_SCREEN_ENTER = 0;
 
 // ---------- STATISTICS DATA ----------
@@ -104,6 +104,7 @@ class Consumer{
   int prodX, prodY;                                                        // coordinates of producer to travel to
   boolean left;                                                            // used for sprite animation
   int switchLegs;                                                          // used for rate of animation
+  int switchLegsCap;
 
   int birthSpeedX, birthSpeedY;                                            // store the initial speeds of the object
   Producer seller;                                                         // store the producer traded with in current gen
@@ -130,9 +131,9 @@ class Consumer{
     //   reservationPrice[i] = random(20,30);
     // }
 
-    this.speedX = int(random(-5,5));          // max = 8   min = -8
+    this.speedX = -int(random(1,3));
     this.birthSpeedX = speedX;
-    this.speedY = int(random(-5,5));          // max = 8   min = -8
+    this.speedY = -int(random(1,3));
     this.birthSpeedY = speedY;
     this.sense = random(150)+100;  // max = 305    min = 150.5
     
@@ -143,6 +144,7 @@ class Consumer{
     consumersSAT[this.UUID] = this.sat;
     this.left = false;
     this.switchLegs = 0;
+    this.switchLegsCap = random(FRAMES/(abs(speedX)+abs(speedY)), 3*FRAMES/(abs(speedX)+abs(speedY)))
 
     this.network = new ArrayList();
 
@@ -151,9 +153,11 @@ class Consumer{
 
   // CHILD CONSTRUCTOR CLASS
   Consumer(int UUID, float reservationPrice, int parentWealth, int parentRisk, int speedX, int speedY, int sense, int colour){
-    
+    this.UUID = UUID
+
     println("CHILD BEING CREATED WITH UUID " + UUID);
     println(colour);
+    
     this.consumerPNG = loadImage("img/consumerart/consumer" + colour + ".png");
     this.consumer_rightPNG = loadImage("img/consumerart/consumer_right" + colour + ".png");
     this.consumer_leftPNG = loadImage("img/consumerart/consumer_left" + colour + ".png");
@@ -185,20 +189,19 @@ class Consumer{
     // should be a function of wealth and risk
     this.reservationPrice = new float[ALLPRODUCTS.size()];
 
-
-    this.speedX = int(random(-2,2)) + speedX;
+    this.speedX = int(random(-1,1)) + speedX;
     this.birthSpeedX = speedX;
-    this.speedY = int(random(-2,2)) + speedY; 
+    this.speedY = int(random(-1,1)) + speedY; 
     this.birthSpeedY = speedY;
     this.sense = random(-30, 30) + sense;
     
-    this.UUID = UUID
     this.x = random(((((windowWidth-200)/(CONSUMERS+1)))*UUID)+100, ((((windowWidth-200)/(CONSUMERS+1)))*(UUID+1))+100);
     this.y = random(windowHeight-200, windowHeight-150);
     this.MOVING = false;
     consumersSAT[this.UUID] = this.sat;
     this.left = false;
     this.switchLegs = 0;
+    this.switchLegsCap = random(FRAMES/(abs(speedX)+abs(speedY)), 3*FRAMES/(abs(speedX)+abs(speedY)))
 
     this.network = new ArrayList();
   }
@@ -228,79 +231,79 @@ class Consumer{
     return -1;
   }
 
-  // void move(){
-  //   if(!MOVING || (abs(this.x - this.prodX) <= epsilon && abs(this.y - this.prodY) <= epsilon)){
-  //     consumersSAT[this.UUID] = true;
-  //     return;
-  //   }
-  //   // println(producersX);
+  void move(){
+    // if(!MOVING || (abs(this.x - this.prodX) <= epsilon && abs(this.y - this.prodY) <= epsilon)){
+    //   consumersSAT[this.UUID] = true;
+    //   return;
+    // }
+    // println(producersX);
 
-  //   if(!this.sat){
-  //     rand = random(0,1);
-  //     if(rand > 0.97){random_walk();}
+    // if(!this.sat){
+    //   rand = random(0,1);
+    //   if(rand > 0.97){random_walk();}
       
-  //     int chk = check_range();
-  //     if(chk != -1){
-  //       // FOUND SELLER, now need to barter -
-  //       this.seller = currentGenProducers[chk];
-  //       if(this.seller.get_available){
-  //         // seller has material to sell - continue
-  //         float prpsdOffer = -1;
-  //         float backOffer = -2;
-  //         int backAndForth = 0;
-  //         while(prpsdOffer != backOffer){
-  //           if(backAndForth >= 5){
-  //             break;
-  //           }
-  //           prpsdOffer = random(0,min(this.reservationPrice,this.wealth));
-  //           backOffer = this.seller.barter(prpsdOffer);
-  //           backAndForth++;
-  //         }
+    //   int chk = check_range();
+    //   if(chk != -1){
+    //     // FOUND SELLER, now need to barter -
+    //     this.seller = currentGenProducers[chk];
+    //     if(this.seller.get_available){
+    //       // seller has material to sell - continue
+    //       float prpsdOffer = -1;
+    //       float backOffer = -2;
+    //       int backAndForth = 0;
+    //       while(prpsdOffer != backOffer){
+    //         if(backAndForth >= 5){
+    //           break;
+    //         }
+    //         prpsdOffer = random(0,min(this.reservationPrice,this.wealth));
+    //         backOffer = this.seller.barter(prpsdOffer);
+    //         backAndForth++;
+    //       }
           
-  //         if(prpsdOffer == backOffer){
-  //           // agreement reached! - update all as necessary
-  //           this.sat = true;
-  //           this.prodX = producersX[chk];
-  //           this.prodY = producersY[chk];
-  //           producersY[chk] = null;
-  //           producersX[chk] = null;
-  //           int tempMult = (abs(speedX)+abs(speedY))/2;
-  //           this.speedX = this.prodX - this.x;
-  //           this.speedY = this.prodY - this.y;
-  //           int div = sqrt(pow(speedX,2)+pow(speedY,2));
-  //           this.speedX = tempMult*this.speedX/div;
-  //           this.speedY = tempMult*this.speedY/div;
+    //       if(prpsdOffer == backOffer){
+    //         // agreement reached! - update all as necessary
+    //         this.sat = true;
+    //         this.prodX = producersX[chk];
+    //         this.prodY = producersY[chk];
+    //         producersY[chk] = null;
+    //         producersX[chk] = null;
+    //         int tempMult = (abs(speedX)+abs(speedY))/2;
+    //         this.speedX = this.prodX - this.x;
+    //         this.speedY = this.prodY - this.y;
+    //         int div = sqrt(pow(speedX,2)+pow(speedY,2));
+    //         this.speedX = tempMult*this.speedX/div;
+    //         this.speedY = tempMult*this.speedY/div;
 
-  //           this.wealth -= prpsdOffer;
-  //           this.amountOwned++;
-  //           this.seller.deal_made(backOffer, this);
-  //         }
+    //         this.wealth -= prpsdOffer;
+    //         this.amountOwned++;
+    //         this.seller.deal_made(backOffer, this);
+    //       }
 
-  //       }
-  //     }
+    //     }
+    //   }
       
-  //   }
+    // }
 
-  //   // move
-  //   x += speedX;
-  //   y += speedY;
+    // move
+    x += speedX;
+    y += speedY;
 
-  //   // bounce logic
-  //   if (x > windowWidth){
-	// 		x = width;
-	// 		speedX *= -1;
-	// 	} if (y > windowHeight){
-	// 		y = height;
-	// 		speedY *= -1;
-	// 	} if (x < 0){
-	// 		x = 0;
-	// 		speedX *= -1;
-	// 	} if (y < windowHeight/2 - 220){
-	// 		y = windowHeight/2 - 220;
-	// 		speedY *= -1;
-	// 	}
+    // bounce logic
+    if (x > windowWidth){
+			x = width;
+			speedX *= -1;
+		} if (y > windowHeight){
+			y = height;
+			speedY *= -1;
+		} if (x < 0){
+			x = 0;
+			speedX *= -1;
+		} if (y < windowHeight/2 - 220){
+			y = windowHeight/2 - 220;
+			speedY *= -1;
+		}
 
-	// }
+	}
 
   // add angle change
   void random_walk(){
@@ -326,7 +329,7 @@ class Consumer{
     }
     else if(menu == 201 && left){
       switchLegs++;
-      if(switchLegs > FRAMES/2){
+      if(switchLegs > switchLegsCap){
         image(this.consumer_leftPNG, x-48, y-49); 
         left = false;
         switchLegs = 0;
@@ -336,7 +339,7 @@ class Consumer{
     }
     else if(menu == 201 && !left){
       switchLegs++;
-      if(switchLegs > FRAMES/2){
+      if(switchLegs > switchLegsCap){
         image(this.consumer_rightPNG, x-48, y-49); 
         left = true;
         switchLegs = 0;
@@ -816,7 +819,7 @@ void draw() {
     for(int i = 0; i < currentGenConsumers.length; i++){
       if(currentGenConsumers[i] != null){
         currentGenConsumers[i].display();
-        // currentGenConsumers[i].move();
+        currentGenConsumers[i].move();
       }
     }
 
