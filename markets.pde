@@ -1,13 +1,18 @@
 /*
-Game Logic Notes -  The weakest of previous gen is replaced by the child of the strongest of the last generation (CONSUMERS)
-                    Strength is measured by total wealth
+Game Logic Notes -  Replce consumer when they declare banruptcy
 
                     End generation when time is up OR when all producers have been filled (i.e. the producersX is only nulls)
 
                     TO-DO:
                         - Add trade and barter logic
-                        - Impact strength based on if trade successful in last generation
-                        - Store trait variables and produce graphs in stats screen
+                        - Rework game loop - give each consumer a network with whom they can commence trade
+                            - If producer in consumer's network, barter with producer to reach best deal
+
+                        - Give producers unique items
+                        - Give consumers priority and value on items
+
+                        - Come up with list of items to be traded
+                            - est sense of value for each object - make it into a class?
 
 
 */	
@@ -35,7 +40,6 @@ PImage simBG;
 PImage producerPNG;
 PImage logoPNG;
 
-
 int FRAMES = 60;
 int menu = 100;
 int score = 0;
@@ -59,6 +63,9 @@ Producer [] currentGenProducers = new Producer[PRODUCERS];
 int prdsPtr = 0;
 
 
+// ----------- TRADE ITEMS ------------
+ArrayList ALLPRODUCTS;
+
 /*
 ================================ CONSUMER ================================
 GOAL :    End up with maximum value at the end of day by bartering and trading
@@ -70,33 +77,36 @@ TRAITS :  Sense - radius of vision to spot a producer, a function of wealth - bu
 
 */
 class Consumer{
+  // render images
   private PImage consumerPNG;
   private PImage consumer_leftPNG;
   private PImage consumer_rightPNG;
-  
-  // traits
-  private float reservationPrice;
-  int speedX;
-  int speedY;
-  int sense;
-  int risk;   // AVERSE = 0   NEUTRAL = 1   LOVING = 2
 
-  private boolean sat;
-  private float amountOwned;
-  private float wealth;
+  // identifier
   int UUID;
-  int size;
-  int x, y;
-  int r, g, b;
-  int colour;
-  float rand;
-  boolean MOVING;
-  int prodX, prodY;
-  boolean left;
-  int switchLegs;
+  
+  // ----------- TRAITS ------------
+  private float[] reservationPrice;                                                // max price willing to pay for good x
+  int speedX;                                                              // travel speed in x direction
+  int speedY;                                                              // travel speed in y direction
+  int sense;                                                               // sight radius - might be deprecated
+  int risk;   // AVERSE = 0   NEUTRAL = 1   LOVING = 2                     // risk level
+  ArrayList network;                                                       // producers and consumers they know
 
-  int birthSpeedX, birthSpeedY;
-  Producer seller;
+  private boolean sat;                                                     // satisfied for current generation? a.k.a. has consumer bought something yet
+  private float[] amountOwned;                                             // amount of good x owned
+  private float wealth;                                                    // amount of fiat assets owned by consumer
+
+  int x, y;                                                                // current x and y coordinate of consumer                                                            
+  int colour;                                                              // signifies which sprite to use for the consumer
+  float rand;                                                              // random number used for random walk
+  boolean MOVING;                                                          // is consumer CURRENTLY moving?
+  int prodX, prodY;                                                        // coordinates of producer to travel to
+  boolean left;                                                            // used for sprite animation
+  int switchLegs;                                                          // used for rate of animation
+
+  int birthSpeedX, birthSpeedY;                                            // store the initial speeds of the object
+  Producer seller;                                                         // store the producer traded with in current gen
 
 
   // PARENT CONSTRUCTOR CLASS - 1st Generation
@@ -107,29 +117,24 @@ class Consumer{
     this.consumer_rightPNG = loadImage("img/consumerart/consumer_right" + colour + ".png");
     this.consumer_leftPNG = loadImage("img/consumerart/consumer_left" + colour + ".png");
 
-    // this.r = random(50, 200);
-    // this.g = int(random(50, 255));
-    // this.b = random(50, 250);
-    // this.colour = color(this.r,this.g,this.b);
-
     // not satisfied for the current cycle
     this.sat = false;
-    // start with no product owned
-    this.amountOwned = 0;
-    // self starter, started from the bottom
-    this.wealth = random(29)+1;         // max = 30   min = 1
-    this.size = (this.wealth/2)+50;     // max = 65     min = 50.5 radius
+    this.amountOwned = new float[ALLPRODUCTS.size()];
+    this.wealth = random(29)+1;
     this.seller = null;
 
     // -=- TRAITS -=-
     this.risk = random(3);      
-    // should be a function of wealth and risk
-    this.reservationPrice = random(20,30) + random(5,10)*(2-this.risk);     // E[p] = 25 + 7.5*risk = 32.5 for neutral
+    this.reservationPrice = new float[ALLPRODUCTS.size()];
+    // for(int i = 0; i < reservationPrice.length; i++){
+    //   reservationPrice[i] = random(20,30);
+    // }
+
     this.speedX = int(random(-5,5));          // max = 8   min = -8
     this.birthSpeedX = speedX;
     this.speedY = int(random(-5,5));          // max = 8   min = -8
     this.birthSpeedY = speedY;
-    this.sense = random(150)+100+size;  // max = 305    min = 150.5
+    this.sense = random(150)+100;  // max = 305    min = 150.5
     
     this.UUID = UUID
     this.x = random(((((windowWidth-200)/(CONSUMERS+1)))*UUID)+100, ((((windowWidth-200)/(CONSUMERS+1)))*(UUID+1))+100);
@@ -138,6 +143,8 @@ class Consumer{
     consumersSAT[this.UUID] = this.sat;
     this.left = false;
     this.switchLegs = 0;
+
+    this.network = new ArrayList();
 
 
   }
@@ -153,10 +160,9 @@ class Consumer{
 
     this.sat = false;
     // start with no product owned
-    this.amountOwned = 0;
+    this.amountOwned = new float[ALLPRODUCTS.size()];
     // inherit parent's wealth
     this.wealth = random(parentWealth/2, 3*parentWealth/2);
-    this.size = (this.wealth/2)+50;
     this.seller = null;
 
     // -=- TRAITS -=-
@@ -177,7 +183,9 @@ class Consumer{
       this.risk = risks[1];
     }    
     // should be a function of wealth and risk
-    this.reservationPrice = random(-3,3) + (reservationPrice-7.5) + random(5,10)*(2-this.risk);
+    this.reservationPrice = new float[ALLPRODUCTS.size()];
+
+
     this.speedX = int(random(-2,2)) + speedX;
     this.birthSpeedX = speedX;
     this.speedY = int(random(-2,2)) + speedY; 
@@ -187,24 +195,26 @@ class Consumer{
     this.UUID = UUID
     this.x = random(((((windowWidth-200)/(CONSUMERS+1)))*UUID)+100, ((((windowWidth-200)/(CONSUMERS+1)))*(UUID+1))+100);
     this.y = random(windowHeight-200, windowHeight-150);
-    this.MOVING = true;
+    this.MOVING = false;
     consumersSAT[this.UUID] = this.sat;
     this.left = false;
     this.switchLegs = 0;
+
+    this.network = new ArrayList();
   }
 
   // current logic : if below res price, accept; else pick random b/w 0 and res
   int barter(float givenPrice){
-    if(givenPrice < this.reservationPrice){
+    if(givenPrice < this.reservationPrice[0]){
       return givenPrice;
     } else {
-      return random(0, reservationPrice);
+      return random(0, reservationPrice[0]);
     }
   }
 
   // measure of consumer strength
   float total_wealth(){
-    return (this.wealth + (this.amountOwned*this.reservationPrice));    // may be biased b/c reservationPrice includes risk
+    return (this.wealth + (this.amountOwned[0]*this.reservationPrice[0]));    // may be biased b/c reservationPrice includes risk
   }
 
   int check_range() {
@@ -311,18 +321,8 @@ class Consumer{
       stroke(255);
       ellipse(x,  y,  int(this.sense),  int(this.sense));
     }
-    noStroke();
-    fill(r, g, b);
-		// ellipse(x,  y,  size,  size);
     if(menu == 200 || this.sat){
-      int dimension = (96*96);
-      this.consumerPNG.loadPixels();
-      for (int i=0; i < dimension; i+=2) { 
-        this.consumerPNG.pixels[i] = color(0, 0, 0); 
-      } 
-      this.consumerPNG.updatePixels();
       image(this.consumerPNG, x-48, y-49);
-
     }
     else if(menu == 201 && left){
       switchLegs++;
@@ -353,7 +353,7 @@ class Consumer{
   }
 
   float get_reservationPrice(){
-    return this.reservationPrice;
+    return this.reservationPrice[0];
   }
   float get_wealth(){
     return this.wealth;
@@ -367,16 +367,13 @@ class Consumer{
   int get_sense(){
     return this.sense;
   }
-  int [] get_colors(){
-    return [this.r, this.g, this.b];
-  }
 
   void reset_for_next_gen(){
     this.x = random(((((windowWidth-200)/(CONSUMERS+1)))*UUID)+100, ((((windowWidth-200)/(CONSUMERS+1)))*(UUID+1))+100);
     this.y = random(windowHeight-200, windowHeight-150);
     this.prodX = null;
     this.prodY = null;
-    this.MOVING = true;
+    this.MOVING = false;
     this.sat = false;
     consumersSAT[this.UUID] = this.sat;
     this.speedX = birthSpeedX;
@@ -397,7 +394,6 @@ class Producer{
   private int amountOwned;
   private float wealth;
   int UUID;
-  int size;
   public int x, y;
   int r, g, b;
 
@@ -410,7 +406,6 @@ class Producer{
     // function of supply
     this.reservationPrice = amountOwned;
     this.UUID = UUID;
-    this.size = 50;
     this.x = random(((((windowWidth-200)/(CONSUMERS+1)))*UUID)+100, ((((windowWidth-200)/(CONSUMERS+1)))*(UUID+1))+100);
     this.y = random(windowHeight/2 - 150, windowHeight/2 - 180);
     this.r = random(0);
@@ -444,8 +439,6 @@ class Producer{
 
   void display(){
 		noStroke();
-		// fill(r, g, b);
-		// ellipse(x,  y,  size,  size);
     image(producerPNG, x-58, y-59);
     fill(255);
     text(UUID, x-10, y-4);
@@ -586,8 +579,24 @@ void increment_generation(){
 // ================================================================================================================================
 // -------------------------------------------------------- TRAVERSE SCENE ACTION --------------------------------------------------------
 void keyPressed() {
-  if (menu == 100){
+  if (menu == 100 && (key == ENTER || key == RETURN || key == ' ')){
     setMenu(200);
+  } else if (menu == 200 && (key == '1' || key == '!')){
+    if(consPtr > CONSUMERS){consPtr = 0;}
+    currentGenConsumers[consPtr] = new Consumer(consPtr);
+    consPtr++;
+    if(cons <= 10){cons++;}
+    draw();
+  } else if (menu == 200 && (key =='2' || key == '@')){
+    if(prdsPtr > PRODUCERS){prdsPtr = 0;}
+    currentGenProducers[prdsPtr] = new Producer(prdsPtr);
+    producersX[prdsPtr] = currentGenProducers[prdsPtr].x;
+    producersY[prdsPtr] = currentGenProducers[prdsPtr].y;
+    prdsPtr++;
+    if(prds <= 10){prds++;}
+    draw();
+  } else if (menu == 200 && (key == ENTER || key == RETURN)){
+    setMenu(201);
   }
 }
 
@@ -613,7 +622,6 @@ void mouseReleased() {
     // -------------------------------- ADD CONSUMER (1st Generation)
     if(consPtr > CONSUMERS){consPtr = 0;}
     currentGenConsumers[consPtr] = new Consumer(consPtr);
-    // currentGenConsumers[consPtr].display();
     consPtr++;
 
     if(cons <= 10){
@@ -664,8 +672,18 @@ void setup() {
   noSmooth();
   size(1920, 1080, P3D);
   ellipseMode(CENTER);
-  
+
   screenImage = createGraphics(1920, 1080);
+
+  ALLPRODUCTS = new ArrayList();
+  ALLPRODUCTS.add("apple");
+  ALLPRODUCTS.add("rice");
+  ALLPRODUCTS.add("chicken");
+  ALLPRODUCTS.add("potato");
+  ALLPRODUCTS.add("bread");
+  ALLPRODUCTS.add("barley");
+  ALLPRODUCTS.add("fish");
+  ALLPRODUCTS.add("sugar");
 
   for(int i = 0; i < producersX.length; i++){
     producersX[i] = null;
@@ -706,18 +724,13 @@ void draw() {
     strokeWeight(20);
     rect(0, 0, windowWidth-1, windowHeight-1);
 
-    image(logoPNG, 1125, 105)
+    image(logoPNG, 1124, 103)
     fill(100, 200, 100);
     noStroke();
-    // rect(windowWidth/2-200, windowHeight-160, 400, 100);  // rect(x, y, w, h)
-    // rect(windowWidth/2-200, 500, 400, 100);
-    // rect(windowWidth/2-200, 650, 400, 100);
     fill(255);
     text("MARKET ", windowWidth/2, 200);
     textFont(font, 40);
     text("Press Enter to Start", windowWidth/2, windowHeight-100 + 5*cos(START_SCREEN_ENTER/8));
-    // text("INSTRUCTIONS", windowWidth/2, 565);
-    // text("CREDITS", windowWidth/2, 710);
     textFont(font, 96);
     START_SCREEN_ENTER++
   } else if (menu == 101) {
@@ -765,13 +778,13 @@ void draw() {
 
     for(int i = 0; i < currentGenProducers.length; i++){
       if(currentGenProducers[i] != null){
-        currentGenProducers[i].display(this);
+        currentGenProducers[i].display();
       }
     }
 
     for(int i = 0; i < currentGenConsumers.length; i++){
       if(currentGenConsumers[i] != null){
-        currentGenConsumers[i].display(this);
+        currentGenConsumers[i].display();
       }
     }
 
@@ -796,13 +809,13 @@ void draw() {
     textFont(font, 12);
     for(int i = 0; i < currentGenProducers.length; i++){
       if(currentGenProducers[i] != null){
-        currentGenProducers[i].display(this);
+        currentGenProducers[i].display();
       }
     }
 
     for(int i = 0; i < currentGenConsumers.length; i++){
       if(currentGenConsumers[i] != null){
-        currentGenConsumers[i].display(this);
+        currentGenConsumers[i].display();
         // currentGenConsumers[i].move();
       }
     }
