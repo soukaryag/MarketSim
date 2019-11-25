@@ -19,7 +19,7 @@ Game Logic Notes -  Replce consumer when they declare banruptcy
 
 final float windowSizeMultiplier = 1;
 final int SEED = int(random(1000))+1;
-final float epsilon = 6;
+final float epsilon = 4;
 boolean SHOW_RADIUS = false;
 
 int windowWidth = 1920;
@@ -69,7 +69,7 @@ ArrayList ALLPRODUCTS;
 /*
 ================================ CONSUMER ================================
 GOAL :    End up with maximum value at the end of day by bartering and trading
-TRAITS :  Sense - radius of vision to spot a producer, a function of wealth - but everyone has a birth sense that is immutable
+TRAITS :  Sense - radius of vision to spot a producer, a function of fiat - but everyone has a birth sense that is immutable
           Speed - Movement speed, a combination of speedX and speedY
           reservationPrice - Maximum consumer is willing to pay for the product
           risk - Risk averse, risk neutral, risk taking
@@ -86,16 +86,17 @@ class Consumer{
   int UUID;
   
   // ----------- TRAITS ------------
-  private float[] reservationPrice;                                                // max price willing to pay for good x
+  private float[] reservationPrice;                                        // max price willing to pay for good x
   int speedX;                                                              // travel speed in x direction
   int speedY;                                                              // travel speed in y direction
+  int speed;                                                               // speed of trade
   int sense;                                                               // sight radius - might be deprecated
   int risk;   // AVERSE = 0   NEUTRAL = 1   LOVING = 2                     // risk level
   ArrayList network;                                                       // producers and consumers they know
 
   private boolean sat;                                                     // satisfied for current generation? a.k.a. has consumer bought something yet
   private float[] amountOwned;                                             // amount of good x owned
-  private float wealth;                                                    // amount of fiat assets owned by consumer
+  private float fiat;                                                      // amount of fiat assets owned by consumer
 
   int x, y;                                                                // current x and y coordinate of consumer                                                            
   int colour;                                                              // signifies which sprite to use for the consumer
@@ -121,38 +122,45 @@ class Consumer{
     // not satisfied for the current cycle
     this.sat = false;
     this.amountOwned = new float[ALLPRODUCTS.size()];
-    this.wealth = random(29)+1;
+    for(int i = 0; i < amountOwned.length; i++){
+      amountOwned[i] = 0;
+    }
+    this.fiat = random(29)+1;
     this.seller = null;
 
     // -=- TRAITS -=-
     this.risk = random(3);      
     this.reservationPrice = new float[ALLPRODUCTS.size()];
-    // for(int i = 0; i < reservationPrice.length; i++){
-    //   reservationPrice[i] = random(20,30);
-    // }
+    for(int i = 0; i < reservationPrice.length; i++){
+      reservationPrice[i] = random(5,100);                  // flesh this out
+    }
 
-    this.speedX = -int(random(1,3));
+    this.speedX = -int(random(1,4));
     this.birthSpeedX = speedX;
-    this.speedY = -int(random(1,3));
+    this.speedY = -int(random(1,4));
     this.birthSpeedY = speedY;
     this.sense = random(150)+100;  // max = 305    min = 150.5
+    this.speed = 4-int((distance(speedX,0,speedY,0)/(sqrt(18)/4)));      // lower = faster      max = 3      min = 1
     
     this.UUID = UUID
     this.x = random(((((windowWidth-200)/(CONSUMERS+1)))*UUID)+100, ((((windowWidth-200)/(CONSUMERS+1)))*(UUID+1))+100);
     this.y = random(windowHeight-200, windowHeight-150);
-    this.MOVING = true;
+    this.MOVING = false;
     consumersSAT[this.UUID] = this.sat;
     this.left = false;
     this.switchLegs = 0;
     this.switchLegsCap = random(FRAMES/(abs(speedX)+abs(speedY)), 3*FRAMES/(abs(speedX)+abs(speedY)))
 
     this.network = new ArrayList();
-
+    // adding every producer to the network -- flesh this out with graph
+    for(int i = 0; i < currentGenProducers.length; i++){
+      network.add(currentGenProducers[i]);
+    }
 
   }
 
   // CHILD CONSTRUCTOR CLASS
-  Consumer(int UUID, float reservationPrice, int parentWealth, int parentRisk, int speedX, int speedY, int sense, int colour){
+  Consumer(int UUID, float[] reservationPrice, int parentWealth, int parentRisk, int speedX, int speedY, int sense, int colour){
     this.UUID = UUID
 
     println("CHILD BEING CREATED WITH UUID " + UUID);
@@ -165,8 +173,11 @@ class Consumer{
     this.sat = false;
     // start with no product owned
     this.amountOwned = new float[ALLPRODUCTS.size()];
-    // inherit parent's wealth
-    this.wealth = random(parentWealth/2, 3*parentWealth/2);
+    for(int i = 0; i < amountOwned.length; i++){
+      amountOwned[i] = 0;
+    }
+    // inherit parent's fiat
+    this.fiat = random(parentWealth/2, 3*parentWealth/2);
     this.seller = null;
 
     // -=- TRAITS -=-
@@ -186,14 +197,18 @@ class Consumer{
     } else if(temp < 1.0) {
       this.risk = risks[1];
     }    
-    // should be a function of wealth and risk
-    this.reservationPrice = new float[ALLPRODUCTS.size()];
+    // should be a function of fiat and risk
+    this.reservationPrice = reservationPrice;
+    for(int i = 0; i < reservationPrice.length; i++){
+      reservationPrice[i] = random(5,100);                  // flesh this out
+    }
 
     this.speedX = int(random(-1,1)) + speedX;
     this.birthSpeedX = speedX;
     this.speedY = int(random(-1,1)) + speedY; 
     this.birthSpeedY = speedY;
     this.sense = random(-30, 30) + sense;
+    this.speed = 4-int((distance(speedX,0,speedY,0)/(sqrt(18)/4)));
     
     this.x = random(((((windowWidth-200)/(CONSUMERS+1)))*UUID)+100, ((((windowWidth-200)/(CONSUMERS+1)))*(UUID+1))+100);
     this.y = random(windowHeight-200, windowHeight-150);
@@ -204,20 +219,23 @@ class Consumer{
     this.switchLegsCap = random(FRAMES/(abs(speedX)+abs(speedY)), 3*FRAMES/(abs(speedX)+abs(speedY)))
 
     this.network = new ArrayList();
-  }
-
-  // current logic : if below res price, accept; else pick random b/w 0 and res
-  int barter(float givenPrice){
-    if(givenPrice < this.reservationPrice[0]){
-      return givenPrice;
-    } else {
-      return random(0, reservationPrice[0]);
+    for(int i = 0; i < currentGenProducers.length; i++){
+      network.add(currentGenProducers[i]);
     }
   }
 
+  // current logic : if below res price, accept; else pick random b/w 0 and res
+  // int barter(float givenPrice){
+  //   if(givenPrice < this.reservationPrice[0]){
+  //     return givenPrice;
+  //   } else {
+  //     return random(0, reservationPrice[0]);
+  //   }
+  // }
+
   // measure of consumer strength
   float total_wealth(){
-    return (this.wealth + (this.amountOwned[0]*this.reservationPrice[0]));    // may be biased b/c reservationPrice includes risk
+    return (this.fiat + (this.amountOwned[0]*this.reservationPrice[0]));    // may be biased b/c reservationPrice includes risk
   }
 
   int check_range() {
@@ -231,7 +249,59 @@ class Consumer{
     return -1;
   }
 
+  void trade(){
+    // allowed to trade once per speed iteration
+    if((CURR_TICK/FRAMES) % this.speed == 0 && !this.sat){
+      // pick someone in network to trade with if enters this branch
+      // println("entered trade branch for Consumer " + this.UUID + " with speed " + this.speedX + " " + this.speedY + " " + this.speed);
+      this.seller = currentGenProducers[int(random(network.size()))];
+      if(this.seller.barter(this.reservationPrice[0]/2, 0)){  // offer half of res price for first good
+        // trade accepted
+        this.sat = true;
+        this.prodX = this.seller.x;
+        this.prodY = this.seller.y;
+        this.MOVING = true;
+
+        int tempMult = (abs(this.speedX)+abs(this.speedY))/2;
+        this.speedX = this.prodX - this.x;
+        this.speedY = this.prodY - this.y;
+        int div = sqrt(pow(speedX,2)+pow(speedY,2));
+        this.speedX = tempMult*this.speedX/div;
+        this.speedY = tempMult*this.speedY/div;
+
+        this.fiat -= (this.reservationPrice[0]/2);
+        this.amountOwned[0]++;
+        println(this.UUID + " reached a deal with " + this.seller.UUID + " on good 0 for $" + (this.reservationPrice[0]/2));
+      }
+
+    }
+  }
+
   void move(){
+    // move
+    if(MOVING && (abs(this.x - this.prodX) >= epsilon && abs(this.y - this.prodY) >= epsilon)){
+      x += speedX;
+      y += speedY;
+
+      // bounce logic
+      if (x > windowWidth){
+        x = width;
+        speedX *= -1;
+      } if (y > windowHeight){
+        y = height;
+        speedY *= -1;
+      } if (x < 0){
+        x = 0;
+        speedX *= -1;
+      } if (y < windowHeight/2 - 220){
+        y = windowHeight/2 - 220;
+        speedY *= -1;
+      }
+    } else {
+      this.MOVING = false;
+    }
+    
+	}
     // if(!MOVING || (abs(this.x - this.prodX) <= epsilon && abs(this.y - this.prodY) <= epsilon)){
     //   consumersSAT[this.UUID] = true;
     //   return;
@@ -255,7 +325,7 @@ class Consumer{
     //         if(backAndForth >= 5){
     //           break;
     //         }
-    //         prpsdOffer = random(0,min(this.reservationPrice,this.wealth));
+    //         prpsdOffer = random(0,min(this.reservationPrice,this.fiat));
     //         backOffer = this.seller.barter(prpsdOffer);
     //         backAndForth++;
     //       }
@@ -267,14 +337,14 @@ class Consumer{
     //         this.prodY = producersY[chk];
     //         producersY[chk] = null;
     //         producersX[chk] = null;
-    //         int tempMult = (abs(speedX)+abs(speedY))/2;
-    //         this.speedX = this.prodX - this.x;
-    //         this.speedY = this.prodY - this.y;
-    //         int div = sqrt(pow(speedX,2)+pow(speedY,2));
-    //         this.speedX = tempMult*this.speedX/div;
-    //         this.speedY = tempMult*this.speedY/div;
+            // int tempMult = (abs(speedX)+abs(speedY))/2;
+            // this.speedX = this.prodX - this.x;
+            // this.speedY = this.prodY - this.y;
+            // int div = sqrt(pow(speedX,2)+pow(speedY,2));
+            // this.speedX = tempMult*this.speedX/div;
+            // this.speedY = tempMult*this.speedY/div;
 
-    //         this.wealth -= prpsdOffer;
+    //         this.fiat -= prpsdOffer;
     //         this.amountOwned++;
     //         this.seller.deal_made(backOffer, this);
     //       }
@@ -284,26 +354,6 @@ class Consumer{
       
     // }
 
-    // move
-    x += speedX;
-    y += speedY;
-
-    // bounce logic
-    if (x > windowWidth){
-			x = width;
-			speedX *= -1;
-		} if (y > windowHeight){
-			y = height;
-			speedY *= -1;
-		} if (x < 0){
-			x = 0;
-			speedX *= -1;
-		} if (y < windowHeight/2 - 220){
-			y = windowHeight/2 - 220;
-			speedY *= -1;
-		}
-
-	}
 
   // add angle change
   void random_walk(){
@@ -324,7 +374,7 @@ class Consumer{
       stroke(255);
       ellipse(x,  y,  int(this.sense),  int(this.sense));
     }
-    if(menu == 200 || this.sat){
+    if(menu == 200 || !this.MOVING){
       image(this.consumerPNG, x-48, y-49);
     }
     else if(menu == 201 && left){
@@ -351,15 +401,15 @@ class Consumer{
     text(UUID, x, y);
 	}
 
-  private void set_wealth(float w){
-    this.wealth = w;
+  private void set_fiat(float w){
+    this.fiat = w;
   }
 
-  float get_reservationPrice(){
-    return this.reservationPrice[0];
+  float[] get_reservationPrice(){
+    return this.reservationPrice;
   }
-  float get_wealth(){
-    return this.wealth;
+  float get_fiat(){
+    return this.fiat;
   }
   int get_risk(){
     return this.risk;
@@ -392,10 +442,10 @@ class Consumer{
 
 */
 class Producer{
-  private float reservationPrice;
+  private float[] reservationPrice;
   // private boolean sat;
-  private int amountOwned;
-  private float wealth;
+  private int[] amountOwned;
+  private float fiat;
   int UUID;
   public int x, y;
   int r, g, b;
@@ -404,10 +454,16 @@ class Producer{
 
   Producer(int UUID){
     // this.sat = false;
-    this.amountOwned = random(5)+2;
-    this.wealth = 0;
+    this.amountOwned = new float[ALLPRODUCTS.size()];
+    for(int i = 0; i < amountOwned.length; i++){
+      amountOwned[i] = int(random(0,10));
+    }
+    this.fiat = 0;
     // function of supply
-    this.reservationPrice = amountOwned;
+    this.reservationPrice = new float[ALLPRODUCTS.size()];
+    for(int i = 0; i < reservationPrice.length; i++){
+      reservationPrice[i] = random(1, 60);
+    }
     this.UUID = UUID;
     this.x = random(((((windowWidth-200)/(CONSUMERS+1)))*UUID)+100, ((((windowWidth-200)/(CONSUMERS+1)))*(UUID+1))+100);
     this.y = random(windowHeight/2 - 150, windowHeight/2 - 180);
@@ -418,26 +474,27 @@ class Producer{
   }
 
   boolean get_available(){
-    return this.amountOwned > 0;
+    return this.amountOwned[0] > 0;
   }
 
   // current logic : if below res price, accept; else pick random b/w 0 and res
-  int barter(float givenPrice){
-    if(givenPrice > this.reservationPrice){
-      return givenPrice;
+  boolean barter(float givenPrice, int good){
+    if(givenPrice > this.reservationPrice[good]){       // as long as offer > res then accept
+      this.deal_made(givenPrice, good);
+      return true;
     } else {
-      return random(reservationPrice, 3*reservationPrice);
+      return false;
     }
   }
 
   float total_wealth(){
-    return (this.wealth + (this.amountOwned*this.reservationPrice));
+    return (this.fiat + (this.amountOwned[0]*this.reservationPrice[0]));
   }
 
-  void deal_made(float price, Consumer buyer){
+  void deal_made(float price, int good){
     this.buyer = buyer;
-    this.wealth += price;
-    this.amountOwned--;
+    this.fiat += price;
+    this.amountOwned[good]--;
   }
 
   void display(){
@@ -447,8 +504,8 @@ class Producer{
     text(UUID, x-10, y-4);
 	}
 
-  private void set_wealth(float w){
-    this.wealth = w;
+  private void set_fiat(float w){
+    this.fiat = w;
   }
 
 }
@@ -548,7 +605,7 @@ void increment_generation(){
   if(worstCons != bestCons){
     // replace worst consumer
     UUID = currentGenConsumers[worstCons].UUID;
-    currentGenConsumers[worstCons] = new Consumer(UUID, currentGenConsumers[bestCons].get_reservationPrice(), currentGenConsumers[bestCons].get_wealth(), currentGenConsumers[bestCons].get_risk(), currentGenConsumers[bestCons].get_speed()[0], currentGenConsumers[bestCons].get_speed()[1], currentGenConsumers[bestCons].get_sense(), currentGenConsumers[bestCons].colour);
+    currentGenConsumers[worstCons] = new Consumer(UUID, currentGenConsumers[bestCons].get_reservationPrice(), currentGenConsumers[bestCons].get_fiat(), currentGenConsumers[bestCons].get_risk(), currentGenConsumers[bestCons].get_speed()[0], currentGenConsumers[bestCons].get_speed()[1], currentGenConsumers[bestCons].get_sense(), currentGenConsumers[bestCons].colour);
   } else if(worstCons == bestCons) {
     // replace random person
     UUID = random(cons);
@@ -583,14 +640,17 @@ void increment_generation(){
 // -------------------------------------------------------- TRAVERSE SCENE ACTION --------------------------------------------------------
 void keyPressed() {
   if (menu == 100 && (key == ENTER || key == RETURN || key == ' ')){
+    // goto GAME
     setMenu(200);
   } else if (menu == 200 && (key == '1' || key == '!')){
+    // add consumer
     if(consPtr > CONSUMERS){consPtr = 0;}
     currentGenConsumers[consPtr] = new Consumer(consPtr);
     consPtr++;
     if(cons <= 10){cons++;}
     draw();
   } else if (menu == 200 && (key =='2' || key == '@')){
+    // add producer
     if(prdsPtr > PRODUCERS){prdsPtr = 0;}
     currentGenProducers[prdsPtr] = new Producer(prdsPtr);
     producersX[prdsPtr] = currentGenProducers[prdsPtr].x;
@@ -599,7 +659,11 @@ void keyPressed() {
     if(prds <= 10){prds++;}
     draw();
   } else if (menu == 200 && (key == ENTER || key == RETURN)){
+    // start generation
     setMenu(201);
+  } else if (menu == 202 && (key == ENTER || key == RETURN)){
+    // next generation
+    setMenu(200);
   }
 }
 
@@ -611,13 +675,7 @@ void mouseReleased() {
     setMenu(200); // goto GAME
   } 
   
-  // else if (menu == 100 && abs(mX-(windowWidth/2)) <= 200 && abs(mY-550) <= 50) {
-  //   setMenu(101); // goto INSTRUCTIONS
-  // } else if (menu == 100 && abs(mX-(windowWidth/2)) <= 200 && abs(mY-700) <= 50) {
-  //   setMenu(102); // goto CREDITS
-  // } 
-  
-  if ((menu == 102 || menu == 101) && abs(mX-(windowWidth/2)) <= 200 && abs(mY-550) <= 50) {
+  else if ((menu == 102 || menu == 101) && abs(mX-(windowWidth/2)) <= 200 && abs(mY-550) <= 50) {
     setMenu(100); // goto MAIN MENU
   } else if (menu == -1 && abs(mX-(windowWidth/2)) <= 300 && abs(mY-400) <= 100) {
     reset();
@@ -819,6 +877,7 @@ void draw() {
     for(int i = 0; i < currentGenConsumers.length; i++){
       if(currentGenConsumers[i] != null){
         currentGenConsumers[i].display();
+        currentGenConsumers[i].trade();
         currentGenConsumers[i].move();
       }
     }
