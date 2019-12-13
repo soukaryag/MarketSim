@@ -34,6 +34,7 @@ boolean [] consumersSAT = new boolean[CONSUMERS];
 
 PFont font;
 PGraphics screenImage;
+PGraphics graphImage;
 
 PImage mainMenuPNG;
 PImage simBG;
@@ -45,7 +46,7 @@ int menu = 100;
 int score = 0;
 int GENERATION = 0;
 int CURR_TICK = 0;
-int GENERATION_TIME = 15 * FRAMES;   // 10 second generation time
+int GENERATION_TIME = 4 * FRAMES;   // 10 second generation time
 int START_SCREEN_ENTER = 0;
 
 // ---------- STATISTICS DATA ----------
@@ -254,8 +255,8 @@ class Consumer{
     if((CURR_TICK/FRAMES) % this.speed == 0 && !this.sat){
       // pick someone in network to trade with if enters this branch
       // println("entered trade branch for Consumer " + this.UUID + " with speed " + this.speedX + " " + this.speedY + " " + this.speed);
-      this.seller = currentGenProducers[int(random(network.size()))];
-      if(this.seller.barter(this.reservationPrice[0]/2, 0)){  // offer half of res price for first good
+      this.seller = currentGenProducers[int(random(network.size()))-1];
+      if(this.seller != null && this.seller.barter(this.reservationPrice[0]/2, 0)){  // offer half of res price for first good
         // trade accepted
         this.sat = true;
         this.prodX = this.seller.x;
@@ -635,6 +636,17 @@ void increment_generation(){
 }
 
 
+void drawGraph(int graphWidth, int graphHeight) { 
+  graphImage.beginDraw();
+  graphImage.smooth();
+  graphImage.background(220);
+  if (GENERATION >= 1) {
+    drawLines(90, int(graphHeight*0.05), graphWidth-90, int(graphHeight*0.9));
+    drawSegBars(90, 0, graphWidth-90, 150);
+  }
+  graphImage.endDraw();
+}
+
 
 // ================================================================================================================================
 // -------------------------------------------------------- TRAVERSE SCENE ACTION --------------------------------------------------------
@@ -735,6 +747,7 @@ void setup() {
   ellipseMode(CENTER);
 
   screenImage = createGraphics(1920, 1080);
+  graphImage = createGraphics(975, 570);
 
   ALLPRODUCTS = new ArrayList();
   ALLPRODUCTS.add("apple");
@@ -906,6 +919,8 @@ void draw() {
       text("Consumer Total (Generation " + i + "): " + int(consWealthHistory.get(i)), windowWidth/2-300, 100*(i+1)+50);
       text("Producer Total (Generation " + i + "): " + int(prodWealthHistory.get(i)), windowWidth/2+300, 100*(i+1)+50);
     }
+
+    image(graphImage, 50, 180);
 
   } else if (menu == -1) {
     // GAME OVER STATE
